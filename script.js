@@ -416,7 +416,11 @@ class SoundPadPro {
     }
 
     showUploadModal() {
-        document.getElementById('uploadModal').classList.add('active');
+        const uploadModal = document.getElementById('uploadModal');
+        // Corrigir: Remover 'active', adicionar padrão 'flex' e remover 'hidden'
+        uploadModal.classList.remove('hidden');
+        uploadModal.classList.add('flex');
+        uploadModal.classList.remove('active');
         document.getElementById('soundName').value = '';
         document.getElementById('hotkey').value = '';
         document.getElementById('loopCheckbox').checked = false;
@@ -814,8 +818,10 @@ class SoundPadPro {
 
     closeModal(modalId) {
         const modal = document.getElementById(modalId);
+        // Corrigir: Remover 'flex', adicionar 'hidden', remover 'active'
         modal.classList.add('hidden');
         modal.classList.remove('flex');
+        modal.classList.remove('active');
     }
 
     showNotification(message, type = 'info') {
