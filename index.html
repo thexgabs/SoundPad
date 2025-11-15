@@ -173,6 +173,17 @@
                     <input type="text" id="soundName" placeholder="Digite o nome do som">
                 </div>
                 <div class="form-group">
+                    <label>Arquivo de Áudio:</label>
+                    <input type="file" id="padAudioFile" accept="audio/*" class="audio-file-input">
+                    <div class="file-info" id="fileInfo" style="display: none;">
+                        <i class="fas fa-music"></i>
+                        <span id="fileName"></span>
+                        <button type="button" class="remove-file-btn" onclick="soundPad.removeAudioFile()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
                     <label>Cor do Pad:</label>
                     <div class="color-picker">
                         <button class="color-btn" data-color="#ff6b6b" style="background: #ff6b6b"></button>
@@ -249,3 +260,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+

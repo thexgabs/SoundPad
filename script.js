@@ -9,6 +9,9 @@ class SoundPadPro {
         this.metronomeInterval = null;
         this.recordingMedia = null;
         this.recordedChunks = [];
+        this.isLoading = false; // Flag para controlar carregamento inicial
+        this.currentAudioFile = null; // Armazenar arquivo de áudio atual do modal
+        this.currentAudioBuffer = null; // Armazenar buffer de áudio atual do modal
         this.settings = {
             theme: 'dark',
             audioQuality: 'medium',
@@ -24,7 +27,19 @@ class SoundPadPro {
         this.loadSettings();
         this.loadSavedData();
         this.setupEventListeners();
-        this.createDefaultPads();
+        
+        console.log('Após carregar dados salvos, quantidade de pads:', this.pads.size);
+        
+        // Só criar pads padrão se não houver dados salvos
+        if (this.pads.size === 0) {
+            console.log('Nenhum pad encontrado, criando pads padrão');
+            this.createDefaultPads();
+        } else {
+            console.log('Pads já existem, não criando pads padrão');
+        }
+        
+        console.log('Quantidade final de pads:', this.pads.size);
+        
         this.updateVUMeters();
         this.setupKeyboardShortcuts();
     }
@@ -237,6 +252,14 @@ class SoundPadPro {
     }
 
     createPad(id, data) {
+        console.log('Criando pad:', id, data);
+        
+        // Verificar se o pad já existe no Map
+        if (this.pads.has(id)) {
+            console.log('Pad já existe no Map, removendo:', id);
+            this.pads.delete(id);
+        }
+        
         const pad = {
             id,
             name: data.name || 'Sem nome',
@@ -251,16 +274,29 @@ class SoundPadPro {
         };
 
         this.pads.set(id, pad);
+        console.log('Pad adicionado ao Map. Total de pads:', this.pads.size);
+        
         this.renderPad(pad);
         
-        if (this.settings.autoSave) {
+        // Não salvar automaticamente durante carregamento inicial
+        if (this.settings.autoSave && !this.isLoading) {
+            console.log('Salvando automaticamente após criar pad');
             this.saveToLocalStorage();
         }
     }
 
     renderPad(pad) {
         const padsGrid = document.getElementById('padsGrid');
-        const padElement = document.createElement('div');
+        
+        // Verificar se o pad já existe no DOM
+        let padElement = document.getElementById(pad.id);
+        if (padElement) {
+            // Se já existe, remover antes de recriar
+            padElement.remove();
+        }
+        
+        // Criar novo elemento
+        padElement = document.createElement('div');
         padElement.className = 'pad';
         padElement.id = pad.id;
         padElement.style.background = `linear-gradient(135deg, ${pad.color}dd, ${pad.color}99)`;
@@ -272,6 +308,9 @@ class SoundPadPro {
             <div class="pad-controls">
                 <button class="pad-control-btn" onclick="soundPad.togglePadLoop('${pad.id}')" title="Loop">
                     <i class="fas ${pad.loop ? 'fa-repeat' : 'fa-arrow-right'}"></i>
+                </button>
+                <button class="pad-control-btn pad-stop-btn" onclick="soundPad.stopPad('${pad.id}')" title="Parar">
+                    <i class="fas fa-stop"></i>
                 </button>
                 <button class="pad-control-btn" onclick="soundPad.deletePad('${pad.id}')" title="Excluir">
                     <i class="fas fa-trash"></i>
@@ -416,14 +455,67 @@ class SoundPadPro {
     }
 
     showUploadModal() {
-        document.getElementById('uploadModal').classList.add('active');
+        const modal = document.getElementById('uploadModal');
+        modal.classList.add('show');
         document.getElementById('soundName').value = '';
         document.getElementById('hotkey').value = '';
         document.getElementById('loopCheckbox').checked = false;
         
+        // Reset audio file
+        this.currentAudioFile = null;
+        this.currentAudioBuffer = null;
+        document.getElementById('padAudioFile').value = '';
+        document.getElementById('fileInfo').style.display = 'none';
+        
         // Select first color by default
         document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('selected'));
         document.querySelector('.color-btn').classList.add('selected');
+        
+        // Add event listener for audio file input
+        const audioFileInput = document.getElementById('padAudioFile');
+        audioFileInput.removeEventListener('change', this.handlePadAudioFile);
+        audioFileInput.addEventListener('change', (e) => this.handlePadAudioFile(e.target.files[0]));
+    }
+
+    async handlePadAudioFile(file) {
+        if (!file || !file.type.startsWith('audio/')) {
+            this.showNotification('Por favor, selecione um arquivo de áudio válido.', 'error');
+            return;
+        }
+
+        try {
+            this.showNotification('Carregando arquivo de áudio...', 'info');
+            
+            const arrayBuffer = await file.arrayBuffer();
+            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            
+            this.currentAudioFile = file;
+            this.currentAudioBuffer = audioBuffer;
+            
+            // Update UI to show selected file
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileInfo').style.display = 'flex';
+            
+            // Auto-fill name if empty
+            if (!document.getElementById('soundName').value) {
+                document.getElementById('soundName').value = file.name.replace(/\.[^/.]+$/, '');
+            }
+            
+            this.showNotification('Arquivo de áudio carregado com sucesso!', 'success');
+            
+        } catch (error) {
+            console.error('Erro ao carregar arquivo de áudio:', error);
+            this.showNotification('Erro ao carregar arquivo de áudio.', 'error');
+            this.currentAudioFile = null;
+            this.currentAudioBuffer = null;
+        }
+    }
+
+    removeAudioFile() {
+        this.currentAudioFile = null;
+        this.currentAudioBuffer = null;
+        document.getElementById('padAudioFile').value = '';
+        document.getElementById('fileInfo').style.display = 'none';
     }
 
     confirmPadCreation() {
@@ -438,14 +530,26 @@ class SoundPadPro {
             color,
             hotkey,
             loop,
-            icon: 'fa-music'
+            icon: 'fa-music',
+            audioBuffer: this.currentAudioBuffer,
+            audioFile: this.currentAudioFile ? this.currentAudioFile.name : null
         };
         
         const padId = `pad-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         this.createPad(padId, padData);
         
+        // Add to playlist if has audio
+        if (this.currentAudioBuffer) {
+            this.addToPlaylist(padData);
+        }
+        
         this.closeModal('uploadModal');
-        this.showNotification('Pad criado com sucesso! Adicione um arquivo de áudio.', 'success');
+        
+        if (this.currentAudioBuffer) {
+            this.showNotification('Pad criado com sucesso! Áudio carregado.', 'success');
+        } else {
+            this.showNotification('Pad criado com sucesso! Adicione um arquivo de áudio depois.', 'info');
+        }
     }
 
     addToPlaylist(audioData) {
@@ -733,8 +837,7 @@ class SoundPadPro {
 
     showSettingsModal() {
         const modal = document.getElementById('settingsModal');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
+        modal.classList.add('show');
         document.getElementById('themeSelect').value = this.settings.theme;
         document.getElementById('audioQuality').value = this.settings.audioQuality;
         document.getElementById('autoSave').checked = this.settings.autoSave;
@@ -788,13 +891,21 @@ class SoundPadPro {
     }
 
     loadSavedData() {
+        this.isLoading = true; // Iniciar modo de carregamento
+        
         const saved = localStorage.getItem('soundpad-data');
         if (saved) {
             try {
                 const data = JSON.parse(saved);
+                console.log('Carregando dados salvos:', data);
+                
+                // Limpar pads existentes antes de carregar
+                this.pads.clear();
+                document.getElementById('padsGrid').innerHTML = '';
                 
                 // Recreate pads
-                if (data.pads) {
+                if (data.pads && data.pads.length > 0) {
+                    console.log('Recriando', data.pads.length, 'pads');
                     data.pads.forEach(padData => {
                         this.createPad(padData.id, padData);
                     });
@@ -809,13 +920,16 @@ class SoundPadPro {
             } catch (error) {
                 console.error('Erro ao carregar dados salvos:', error);
             }
+        } else {
+            console.log('Nenhum dado salvo encontrado');
         }
+        
+        this.isLoading = false; // Finalizar modo de carregamento
     }
 
     closeModal(modalId) {
         const modal = document.getElementById(modalId);
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
+        modal.classList.remove('show');
     }
 
     showNotification(message, type = 'info') {
@@ -863,3 +977,4 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
